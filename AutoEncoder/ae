@@ -1,0 +1,86 @@
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+
+from sklearn.metrics import accuracy_score, precision_score, recall_score
+from sklearn.model_selection import train_test_split
+from tensorflow.keras import layers, losses
+from tensorflow.keras.datasets import fashion_mnist
+from tensorflow.keras.models import Model
+
+
+
+tcndata=np.loadtxt('tcnxyall.txt', dtype=float)
+
+xtrain = [[[0 for k in range(2)] for j in range(28)] for i in range(len(tcndata))]
+for i in range (len(tcndata)):
+    for j in range (28):
+        odd=j*2
+        even=j*2+1
+        xtrain[i][j][0]=tcndata[i][odd]/1000
+        xtrain[i][j][1]=tcndata[i][even]/1000
+x_train=np.array(xtrain)
+print(tcndata.shape)
+
+timesteps = x_train.shape[1]
+input_dim = x_train.shape[2]
+
+'''
+(x_train, _), (x_test, _) = fashion_mnist.load_data()
+x_train = x_train.astype('float32') / 255.
+x_test = x_test.astype('float32') / 255.
+
+x_train = x_train[..., tf.newaxis]
+x_test = x_test[..., tf.newaxis]
+
+print(x_train.shape)
+
+
+noise_factor = 0.2
+x_train_noisy = x_train + noise_factor * tf.random.normal(shape=x_train.shape) 
+x_test_noisy = x_test + noise_factor * tf.random.normal(shape=x_test.shape) 
+
+x_train_noisy = tf.clip_by_value(x_train_noisy, clip_value_min=0., clip_value_max=1.)
+x_test_noisy = tf.clip_by_value(x_test_noisy, clip_value_min=0., clip_value_max=1.)
+'''
+
+class Denoise(Model):
+  def __init__(self):
+    super(Denoise, self).__init__()
+    self.encoder = tf.keras.Sequential([
+      layers.Input(shape=(timesteps, input_dim)),
+      layers.Conv1D(filters=16, kernel_size=3, activation='relu', padding='same', strides=2),
+      layers.Conv1D(filters=8, kernel_size=3, activation='relu', padding='same', strides=2)])
+
+    self.decoder = tf.keras.Sequential([
+      layers.Conv1D(filters=8, kernel_size=3, activation='relu', padding='same'),
+      layers.BatchNormalization(),
+      layers.UpSampling1D(2),
+      layers.Conv1D(filters=16, kernel_size=3, activation='relu', padding='same'),
+      layers.BatchNormalization(),
+      layers.UpSampling1D(2),
+      layers.Conv1D(filters=2, kernel_size=3, activation='sigmoid', padding='same')])
+    
+
+  def call(self, x):
+    encoded = self.encoder(x)
+    decoded = self.decoder(encoded)
+    return decoded
+
+autoencoder = Denoise()
+
+autoencoder.compile(optimizer='adam', loss=losses.MeanSquaredError())
+
+autoencoder.fit(x_train, x_train,
+                epochs=1,
+                shuffle=True,
+                )
+
+#autoencoder.encoder.summary()
+#autoencoder.decoder.summary()
+
+encoded_imgs = autoencoder.encoder(x_train).numpy()
+
+print(encoded_imgs.shape)
